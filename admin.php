@@ -187,7 +187,8 @@ if ($currentUserId > 0) {
     <link rel="stylesheet" href="assets.css">
 </head>
 <body>
-<header>
+<a class="skip-link" href="#main-content">Skip to content</a>
+<header class="site-header">
     <div class="container header-row">
         <div class="brand-wrap">
             <img class="site-logo" src="logo.jpeg" alt="Chance Store Ltd Logo">
@@ -201,7 +202,7 @@ if ($currentUserId > 0) {
     </div>
 </header>
 
-<main class="container">
+<main class="container" id="main-content">
     <?php if ($flash): ?>
         <div class="flash <?= e($flash['type']) ?>"><?= e($flash['message']) ?></div>
     <?php endif; ?>
@@ -608,6 +609,7 @@ if ($currentUserId > 0) {
         <?php endif; ?>
         <section class="panel">
             <h2>User Management</h2>
+            <div class="table-wrap">
             <table>
                 <thead><tr><th>No.</th><th>Name</th><th>Email</th><th>Role</th><th>Telephone</th><th>Created</th><th>Actions</th></tr></thead>
                 <tbody>
@@ -627,6 +629,7 @@ if ($currentUserId > 0) {
                 <?php endforeach; ?>
                 </tbody>
             </table>
+            </div>
             <?php render_pagination('users', $page, $totalPages); ?>
         </section>
     <?php endif; ?>

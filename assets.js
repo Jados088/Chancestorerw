@@ -32,10 +32,14 @@ document.addEventListener('DOMContentLoaded', function () {
         }
         cartPanel.hidden = false;
         cartPanel.classList.add('is-visible');
+        document.querySelectorAll('.cart-open-link').forEach(function (link) {
+            link.setAttribute('aria-expanded', 'true');
+        });
         if (window.history && window.history.replaceState) {
             window.history.replaceState(null, '', '#cart');
         }
         cartPanel.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        cartPanel.focus({ preventScroll: true });
     }
 
     function closeCartPanel() {
@@ -44,6 +48,9 @@ document.addEventListener('DOMContentLoaded', function () {
         }
         cartPanel.hidden = true;
         cartPanel.classList.remove('is-visible');
+        document.querySelectorAll('.cart-open-link').forEach(function (link) {
+            link.setAttribute('aria-expanded', 'false');
+        });
     }
 
     function isCartLink(link) {
@@ -62,6 +69,7 @@ document.addEventListener('DOMContentLoaded', function () {
             var mobileMenuBtn = document.getElementById('mobileMenuBtn');
             if (mobileMenuBtn) {
                 mobileMenuBtn.setAttribute('aria-expanded', 'false');
+                mobileMenuBtn.setAttribute('aria-label', 'Open navigation menu');
                 mobileMenuBtn.textContent = '☰';
             }
         });
@@ -83,6 +91,7 @@ document.addEventListener('DOMContentLoaded', function () {
         mobileMenuBtn.addEventListener('click', function () {
             var isOpen = document.body.classList.toggle('nav-open');
             mobileMenuBtn.setAttribute('aria-expanded', isOpen ? 'true' : 'false');
+            mobileMenuBtn.setAttribute('aria-label', isOpen ? 'Close navigation menu' : 'Open navigation menu');
             mobileMenuBtn.textContent = isOpen ? '✕' : '☰';
         });
 
@@ -93,6 +102,7 @@ document.addEventListener('DOMContentLoaded', function () {
                 }
                 document.body.classList.remove('nav-open');
                 mobileMenuBtn.setAttribute('aria-expanded', 'false');
+                mobileMenuBtn.setAttribute('aria-label', 'Open navigation menu');
                 mobileMenuBtn.textContent = '☰';
             });
         });
@@ -105,6 +115,11 @@ document.addEventListener('DOMContentLoaded', function () {
                 return;
             }
             form.classList.add('is-qty-open');
+            button.setAttribute('aria-expanded', 'true');
+            var quantityWrap = form.querySelector('.add-to-cart-qty-wrap');
+            if (quantityWrap) {
+                quantityWrap.setAttribute('aria-hidden', 'false');
+            }
             var qtyInput = form.querySelector('.qty-input');
             if (qtyInput) {
                 qtyInput.focus();
@@ -116,14 +131,19 @@ document.addEventListener('DOMContentLoaded', function () {
     var searchInput = document.getElementById('productSearch');
     var emptySearch = document.getElementById('emptySearch');
     var productGrid = document.getElementById('productGrid');
+    var searchResults = document.getElementById('productSearchResults');
     if (searchInput) {
         searchInput.addEventListener('input', function () {
             var query = searchInput.value.trim().toLowerCase();
             var cards = document.querySelectorAll('.product-card');
             var visibleCount = 0;
             cards.forEach(function (card) {
-                var text = card.innerText.toLowerCase();
-                var match = text.includes(query);
+                var searchableText = Array.from(
+                    card.querySelectorAll('.card-content h3, .card-content > p')
+                ).map(function (element) {
+                    return element.textContent;
+                }).join(' ').toLowerCase();
+                var match = searchableText.includes(query);
                 card.style.display = match ? '' : 'none';
                 if (match) {
                     visibleCount++;
@@ -134,6 +154,11 @@ document.addEventListener('DOMContentLoaded', function () {
             }
             if (productGrid) {
                 productGrid.style.display = visibleCount === 0 && query !== '' ? 'none' : '';
+            }
+            if (searchResults) {
+                searchResults.textContent = query === ''
+                    ? cards.length + (cards.length === 1 ? ' product available' : ' products available')
+                    : visibleCount + ' matching product' + (visibleCount === 1 ? '' : 's');
             }
         });
     }

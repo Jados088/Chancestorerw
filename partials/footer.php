@@ -11,7 +11,7 @@ $waPhone = phone_digits((string) $contact['phone']);
                 <span class="site-footer-title-main">CHANCE</span>
                 <span class="site-footer-title-accent">STORE LTD</span>
             </h3>
-            <p class="site-footer-desc">Rwanda's trusted destination for quality products. We guarantee authenticity, fair prices, and fast customer support across the country.</p>
+            <p class="site-footer-desc">Explore our products, place a convenient order, and reach our team directly whenever you need help.</p>
             <div class="site-footer-socials">
                 <a class="footer-social-circle" href="https://www.instagram.com/chance_store_rw/" target="_blank" rel="noopener" aria-label="Instagram">
                     <svg viewBox="0 0 24 24" focusable="false"><path d="M7.75 2h8.5A5.75 5.75 0 0 1 22 7.75v8.5A5.75 5.75 0 0 1 16.25 22h-8.5A5.75 5.75 0 0 1 2 16.25v-8.5A5.75 5.75 0 0 1 7.75 2Zm0 1.8A3.95 3.95 0 0 0 3.8 7.75v8.5a3.95 3.95 0 0 0 3.95 3.95h8.5a3.95 3.95 0 0 0 3.95-3.95v-8.5a3.95 3.95 0 0 0-3.95-3.95h-8.5Zm8.95 1.45a1.1 1.1 0 1 1 0 2.2 1.1 1.1 0 0 1 0-2.2ZM12 7a5 5 0 1 1 0 10 5 5 0 0 1 0-10Zm0 1.8a3.2 3.2 0 1 0 0 6.4 3.2 3.2 0 0 0 0-6.4Z"/></svg>
@@ -29,7 +29,7 @@ $waPhone = phone_digits((string) $contact['phone']);
             <h4 class="site-footer-col-title">Shop</h4>
             <ul class="site-footer-links">
                 <li><a href="index.php#products">All Products</a></li>
-                <li><a href="index.php#cart" class="cart-open-link">My Order</a></li>
+                <li><a href="index.php#cart" class="cart-open-link" aria-controls="cart" aria-expanded="false">My Order</a></li>
                 <li><a href="index.php#contact">Contact Us</a></li>
                 <?php if (is_admin_logged_in()): ?>
                     <li><a href="admin.php">Dashboard</a></li>

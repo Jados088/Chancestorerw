@@ -6,6 +6,7 @@ $flash = get_flash();
 $pdo = db();
 
 $products = $pdo->query('SELECT * FROM products ORDER BY created_at DESC')->fetchAll();
+$featuredProduct = $products[0] ?? null;
 $contact = $pdo->query('SELECT * FROM contacts WHERE id = 1')->fetch() ?: [
     'phone' => '',
     'email' => '',
@@ -21,7 +22,9 @@ $cartItemCount = cart_count();
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Chance Store Ltd</title>
+    <meta name="description" content="Explore products from Chance Store Ltd, build one convenient order, and get direct support from our team.">
+    <meta name="theme-color" content="#f7f8f5">
+    <title>Chance Store Ltd | Shop with confidence</title>
     <link rel="icon" type="image/jpeg" href="logo.jpeg">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -29,16 +32,17 @@ $cartItemCount = cart_count();
     <link rel="stylesheet" href="assets.css">
 </head>
 <body>
-<header>
+<a class="skip-link" href="#main-content">Skip to content</a>
+<header class="site-header">
     <div class="container header-row">
-        <div class="brand-wrap">
+        <a class="brand-wrap" href="index.php" aria-label="Chance Store Ltd home">
             <img class="site-logo" src="logo.jpeg" alt="Chance Store Ltd Logo">
             <div class="brand">Chance Store Ltd</div>
-        </div>
+        </a>
         <div class="header-nav-group">
             <nav class="site-nav" id="siteNav" aria-label="Main navigation">
                 <a href="#products">Products</a>
-                <a href="#cart" class="cart-nav-link cart-open-link">
+                <a href="#cart" class="cart-nav-link cart-open-link" aria-controls="cart" aria-expanded="false">
                     My Order
                     <?php if ($cartItemCount > 0): ?>
                         <span class="cart-badge"><?= (int) $cartItemCount ?></span>
@@ -47,45 +51,67 @@ $cartItemCount = cart_count();
                 <a href="#contact">Contact</a>
             </nav>
         </div>
-        <button class="mobile-menu-btn" id="mobileMenuBtn" type="button" aria-label="Toggle menu" aria-expanded="false">☰</button>
+        <button class="mobile-menu-btn" id="mobileMenuBtn" type="button" aria-label="Open navigation menu" aria-expanded="false" aria-controls="siteNav">☰</button>
     </div>
 </header>
 
-<main class="container">
+<main class="container" id="main-content">
     <?php if ($flash): ?>
         <div class="flash <?= e($flash['type']) ?>"><?= e($flash['message']) ?></div>
     <?php endif; ?>
 
-    <section class="hero">
+    <section class="hero" aria-labelledby="hero-title">
         <div class="hero-inner">
-            <span class="hero-badge">✦ Trusted Store in Rwanda</span>
-            <h1>Welcome to Chance Store Ltd</h1>
-            <p>Discover quality products, add multiple items to one order, and get direct support from our team. Simple, transparent, and reliable shopping.</p>
-            <div class="hero-cta">
-                <a class="btn btn-hero" href="#products">Browse Products</a>
-                <a class="btn secondary btn-hero btn-hero-outline cart-open-link" href="#cart">View My Order</a>
+            <div class="hero-copy">
+                <span class="hero-badge">Thoughtful finds, made simple</span>
+                <h1 id="hero-title">Good finds.<br><span>A simpler way to shop.</span></h1>
+                <p>Explore our latest products, build one convenient order, and get personal support directly from our team.</p>
+                <div class="hero-cta">
+                    <a class="btn" href="#products">Explore products <span aria-hidden="true">&rarr;</span></a>
+                    <a class="btn secondary btn-hero-outline cart-open-link" href="#cart" aria-controls="cart" aria-expanded="false">View my order</a>
+                </div>
+                <div class="stats" aria-label="Store highlights">
+                    <div class="stat"><strong><?= count($products) ?></strong><span>Products to explore</span></div>
+                    <div class="stat"><strong>One</strong><span>Simple order</span></div>
+                    <div class="stat"><strong>Direct</strong><span>Seller support</span></div>
+                </div>
             </div>
-            <div class="stats">
-                <div class="stat"><strong>24/7</strong><span>Order Collection</span></div>
-                <div class="stat"><strong>Fast</strong><span>Customer Response</span></div>
-                <div class="stat"><strong><?= count($products) ?></strong><span>Products Available</span></div>
+            <div class="hero-featured" role="group" aria-label="<?= $featuredProduct ? 'Featured product' : 'Chance Store' ?>">
+                <div class="hero-featured-image">
+                    <?php if ($featuredProduct): ?>
+                        <img src="<?= e((string) $featuredProduct['image']) ?>" alt="<?= e((string) $featuredProduct['name']) ?>">
+                    <?php else: ?>
+                        <img class="hero-featured-placeholder" src="logo.jpeg" alt="Chance Store Ltd">
+                    <?php endif; ?>
+                </div>
+                <div class="hero-featured-caption">
+                    <div>
+                        <span><?= $featuredProduct ? 'Recently added' : 'Welcome to' ?></span>
+                        <strong><?= $featuredProduct ? e((string) $featuredProduct['name']) : 'Chance Store Ltd' ?></strong>
+                    </div>
+                    <?php if ($featuredProduct): ?>
+                        <span class="hero-featured-price">FRW <?= number_format((float) $featuredProduct['price'], 2) ?></span>
+                    <?php endif; ?>
+                </div>
             </div>
         </div>
     </section>
 
-    <div class="panel" id="products">
+    <section class="panel" id="products" aria-labelledby="products-title">
         <div class="section-header">
             <div>
-                <h2>Available Products</h2>
+                <h2 id="products-title">Find your next favorite</h2>
                 <p class="section-subtitle">Add one or more products with quantities, then submit a single order.</p>
             </div>
-            <span class="product-count"><?= count($products) ?> items</span>
+            <span class="product-count"><?= count($products) ?> product<?= count($products) === 1 ? '' : 's' ?></span>
         </div>
         <div class="search-wrap search-box">
             <span class="search-icon" aria-hidden="true">&#128269;</span>
-            <input type="text" id="productSearch" placeholder="Search by name or description...">
+            <label class="sr-only" for="productSearch">Search products</label>
+            <input type="search" id="productSearch" placeholder="Search products by name or description..." autocomplete="off" aria-describedby="productSearchResults">
         </div>
-    </div>
+        <p class="search-results" id="productSearchResults" aria-live="polite"><?= count($products) ?> product<?= count($products) === 1 ? '' : 's' ?> available</p>
+    </section>
 
     <?php if ($products): ?>
         <section class="grid" id="productGrid">
@@ -102,8 +128,8 @@ $cartItemCount = cart_count();
                             <input type="hidden" name="csrf_token" value="<?= e(csrf_token()) ?>">
                             <input type="hidden" name="action" value="add">
                             <input type="hidden" name="product_id" value="<?= (int) $product['id'] ?>">
-                            <button type="button" class="btn add-to-cart-trigger">Add to Order</button>
-                            <div class="add-to-cart-qty-wrap">
+                            <button type="button" class="btn add-to-cart-trigger" aria-expanded="false" aria-controls="quantity-<?= (int) $product['id'] ?>">Add to Order</button>
+                            <div class="add-to-cart-qty-wrap" id="quantity-<?= (int) $product['id'] ?>" aria-hidden="true">
                                 <label class="qty-label" for="qty-<?= (int) $product['id'] ?>">Quantity</label>
                                 <div class="add-to-cart-row">
                                     <input id="qty-<?= (int) $product['id'] ?>" class="qty-input" name="quantity" type="number" min="1" value="1" required>
@@ -130,14 +156,14 @@ $cartItemCount = cart_count();
         </section>
     <?php endif; ?>
 
-    <section id="cart" class="panel order-panel cart-panel" hidden>
+    <section id="cart" class="panel order-panel cart-panel" tabindex="-1" aria-labelledby="cart-title" hidden>
         <div class="section-header">
             <div>
-                <h2>My Order</h2>
+                <h2 id="cart-title">My Order</h2>
                 <p class="section-subtitle">Review all products and quantities before submitting one combined order.</p>
             </div>
             <?php if ($cartLines !== []): ?>
-                <span class="product-count"><?= (int) $cartItemCount ?> items</span>
+                <span class="product-count"><?= (int) $cartItemCount ?> item<?= $cartItemCount === 1 ? '' : 's' ?></span>
             <?php endif; ?>
         </div>
 
@@ -163,14 +189,14 @@ $cartItemCount = cart_count();
                     <tbody>
                         <?php foreach ($cartLines as $line): ?>
                             <tr>
-                                <td>
+                                <td data-label="Product">
                                     <div class="cart-product-cell">
                                         <img src="<?= e($line['image']) ?>" alt="">
                                         <span><?= e($line['name']) ?></span>
                                     </div>
                                 </td>
-                                <td>FRW <?= number_format((float) $line['unit_price'], 2) ?></td>
-                                <td>
+                                <td data-label="Unit price">FRW <?= number_format((float) $line['unit_price'], 2) ?></td>
+                                <td data-label="Quantity">
                                     <form class="cart-inline-form" action="cart_actions.php" method="post">
                                         <input type="hidden" name="csrf_token" value="<?= e(csrf_token()) ?>">
                                         <input type="hidden" name="action" value="update">
@@ -179,8 +205,8 @@ $cartItemCount = cart_count();
                                         <button class="btn secondary btn-sm" type="submit">Update</button>
                                     </form>
                                 </td>
-                                <td><strong>FRW <?= number_format((float) $line['line_total'], 2) ?></strong></td>
-                                <td>
+                                <td data-label="Line total"><strong>FRW <?= number_format((float) $line['line_total'], 2) ?></strong></td>
+                                <td data-label="Action">
                                     <form class="cart-inline-form" action="cart_actions.php" method="post">
                                         <input type="hidden" name="csrf_token" value="<?= e(csrf_token()) ?>">
                                         <input type="hidden" name="action" value="remove">
@@ -208,13 +234,13 @@ $cartItemCount = cart_count();
 
             <div class="cart-checkout">
                 <h3>Customer Details</h3>
-                <form action="place_order.php" method="post" novalidate>
+                <form action="place_order.php" method="post">
                     <input type="hidden" name="csrf_token" value="<?= e(csrf_token()) ?>">
                     <label for="customer_name">Your Name</label>
-                    <input id="customer_name" name="customer_name" required maxlength="120" placeholder="Enter your full name">
+                    <input id="customer_name" name="customer_name" required maxlength="120" placeholder="Enter your full name" autocomplete="name">
 
                     <label for="customer_phone">Phone Number</label>
-                    <input id="customer_phone" name="customer_phone" required maxlength="30" placeholder="e.g. 0781234567">
+                    <input id="customer_phone" name="customer_phone" type="tel" inputmode="tel" required maxlength="30" placeholder="e.g. 0781234567" autocomplete="tel">
 
                     <label for="message">Optional Message</label>
                     <textarea id="message" name="message" rows="4" maxlength="1000" placeholder="Any special instructions for your order..."></textarea>
@@ -234,14 +260,14 @@ $cartItemCount = cart_count();
                 <span class="contact-item-icon" aria-hidden="true">&#9742;</span>
                 <div>
                     <strong>Phone</strong>
-                    <span><?= e($contact['phone']) ?></span>
+                    <a href="tel:<?= e($sellerPhoneDigits) ?>"><?= e($contact['phone']) ?></a>
                 </div>
             </div>
             <div class="contact-item">
                 <span class="contact-item-icon" aria-hidden="true">&#9993;</span>
                 <div>
                     <strong>Email</strong>
-                    <span><?= e($contact['email']) ?></span>
+                    <a href="mailto:<?= e($contact['email']) ?>"><?= e($contact['email']) ?></a>
                 </div>
             </div>
             <div class="contact-item">

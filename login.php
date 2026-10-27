@@ -22,9 +22,9 @@ $flash = get_flash();
     <link rel="stylesheet" href="assets.css">
 </head>
 <body class="login-page">
-<div class="login-page-bg" aria-hidden="true"></div>
+<a class="skip-link" href="#main-content">Skip to content</a>
 
-<header>
+<header class="site-header">
     <div class="container header-row">
         <div class="brand-wrap">
             <img class="site-logo" src="logo.jpeg" alt="Chance Store Ltd Logo">
@@ -36,7 +36,7 @@ $flash = get_flash();
     </div>
 </header>
 
-<main class="container login-main">
+<main class="container login-main" id="main-content">
     <div class="login-shell">
         <section class="login-card-v2">
             <div class="login-card-accent" aria-hidden="true"></div>
@@ -66,7 +66,7 @@ $flash = get_flash();
                 </div>
             <?php endif; ?>
 
-            <form class="login-form" action="login_process.php" method="post" novalidate>
+            <form class="login-form" action="login_process.php" method="post">
                 <input type="hidden" name="csrf_token" value="<?= e(csrf_token()) ?>">
 
                 <div class="login-field">
