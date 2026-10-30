@@ -22,6 +22,13 @@ if ($action === 'download_report') {
     exit;
 }
 
+if (
+    current_user_role() !== 'admin'
+    && !in_array($action, ['update_order_status', 'update_my_profile', 'change_my_password', 'mark_notification_read', 'mark_all_notifications_read'], true)
+) {
+    require_admin();
+}
+
 function upload_product_image(array $file): string
 {
     if (($file['error'] ?? UPLOAD_ERR_NO_FILE) !== UPLOAD_ERR_OK) {
@@ -63,12 +70,19 @@ try {
         $description = trim((string) ($_POST['description'] ?? ''));
         $image = upload_product_image($_FILES['image'] ?? []);
 
-        if ($name === '' || $description === '' || $price < 0) {
+        if ($name === '' || strlen($name) > 200 || $description === '' || $price < 0 || !is_finite($price)) {
             throw new RuntimeException('Provide valid product details.');
         }
 
         $stmt = $pdo->prepare('INSERT INTO products (name, price, description, image) VALUES (?, ?, ?, ?)');
         $stmt->execute([$name, $price, $description, $image]);
+        record_system_activity(
+            $pdo,
+            'product.created',
+            'Added product "' . $name . '".',
+            'Product added',
+            'Product "' . $name . '" was added to the catalog.'
+        );
         set_flash('success', 'Product added.');
         header('Location: admin.php');
         exit;
@@ -79,7 +93,7 @@ try {
         $name = trim((string) ($_POST['name'] ?? ''));
         $price = (float) ($_POST['price'] ?? 0);
         $description = trim((string) ($_POST['description'] ?? ''));
-        if ($id <= 0 || $name === '' || $description === '' || $price < 0) {
+        if ($id <= 0 || $name === '' || strlen($name) > 200 || $description === '' || $price < 0 || !is_finite($price)) {
             throw new RuntimeException('Provide valid product details.');
         }
 
@@ -97,6 +111,13 @@ try {
 
         $update = $pdo->prepare('UPDATE products SET name = ?, price = ?, description = ?, image = ? WHERE id = ?');
         $update->execute([$name, $price, $description, $imagePath, $id]);
+        record_system_activity(
+            $pdo,
+            'product.updated',
+            'Updated product #' . $id . ' "' . $name . '".',
+            'Product updated',
+            'Product "' . $name . '" was updated.'
+        );
         set_flash('success', 'Product updated.');
         header('Location: admin.php');
         exit;
@@ -107,8 +128,21 @@ try {
         if ($id <= 0) {
             throw new RuntimeException('Invalid product ID.');
         }
+        $productStmt = $pdo->prepare('SELECT name FROM products WHERE id = ?');
+        $productStmt->execute([$id]);
+        $product = $productStmt->fetch();
+        if (!$product) {
+            throw new RuntimeException('Product not found.');
+        }
         $stmt = $pdo->prepare('DELETE FROM products WHERE id = ?');
         $stmt->execute([$id]);
+        record_system_activity(
+            $pdo,
+            'product.deleted',
+            'Deleted product #' . $id . ' "' . (string) $product['name'] . '".',
+            'Product deleted',
+            'Product "' . (string) $product['name'] . '" was removed from the catalog.'
+        );
         set_flash('success', 'Product deleted.');
         header('Location: admin.php');
         exit;
@@ -128,6 +162,13 @@ try {
 
         $stmt = $pdo->prepare('UPDATE contacts SET phone = ?, email = ?, address = ? WHERE id = 1');
         $stmt->execute([$phone, $email, $address]);
+        record_system_activity(
+            $pdo,
+            'contacts.updated',
+            'Updated store contact details.',
+            'Store contacts updated',
+            'The store contact details were updated.'
+        );
         set_flash('success', 'Contact details updated.');
         header('Location: admin.php');
         exit;
@@ -140,10 +181,50 @@ try {
             throw new RuntimeException('Invalid order status update.');
         }
 
+        $currentOrder = $pdo->prepare('SELECT status FROM customer_orders WHERE id = ?');
+        $currentOrder->execute([$orderId]);
+        $order = $currentOrder->fetch();
+        if (!$order) {
+            throw new RuntimeException('Order not found.');
+        }
+
+        $previousStatus = (string) $order['status'];
         $stmt = $pdo->prepare('UPDATE customer_orders SET status = ? WHERE id = ?');
         $stmt->execute([$status, $orderId]);
+        if ($previousStatus !== $status) {
+            $message = 'Order #' . $orderId . ' status changed from ' . $previousStatus . ' to ' . $status . '.';
+            record_system_activity(
+                $pdo,
+                'order.status_updated',
+                $message,
+                'Order status updated',
+                $message,
+                true,
+                'admin.php?view=orders'
+            );
+        }
         set_flash('success', 'Order status updated.');
         header('Location: admin.php?view=orders');
+        exit;
+    }
+
+    if ($action === 'mark_notification_read') {
+        $notificationId = (int) ($_POST['notification_id'] ?? 0);
+        if ($notificationId <= 0) {
+            throw new RuntimeException('Invalid notification.');
+        }
+        $stmt = $pdo->prepare(
+            'UPDATE notifications SET is_read = 1 WHERE id = ? AND recipient_user_id = ?'
+        );
+        $stmt->execute([$notificationId, (int) $_SESSION['admin_id']]);
+        header('Location: admin.php?view=notifications');
+        exit;
+    }
+
+    if ($action === 'mark_all_notifications_read') {
+        $stmt = $pdo->prepare('UPDATE notifications SET is_read = 1 WHERE recipient_user_id = ? AND is_read = 0');
+        $stmt->execute([(int) $_SESSION['admin_id']]);
+        header('Location: admin.php?view=notifications');
         exit;
     }
 
@@ -166,6 +247,13 @@ try {
         $update->execute([$name, $email, $telephone, $userId]);
 
         $_SESSION['admin_name'] = $name;
+        record_system_activity(
+            $pdo,
+            'user.profile_updated',
+            'Updated own profile details.',
+            'Account profile updated',
+            'Your account profile was updated.'
+        );
         set_flash('success', 'Profile updated successfully.');
         header('Location: admin.php?view=profile');
         exit;
@@ -200,6 +288,13 @@ try {
         $update = $pdo->prepare('UPDATE users SET password = ? WHERE id = ?');
         $update->execute([password_hash($newPassword, PASSWORD_DEFAULT), $userId]);
 
+        record_system_activity(
+            $pdo,
+            'user.password_changed',
+            'Changed own account password.',
+            'Account password changed',
+            'An account password was changed.'
+        );
         set_flash('success', 'Password changed successfully.');
         header('Location: admin.php?view=profile');
         exit;
@@ -235,6 +330,13 @@ try {
             'INSERT INTO users (name, email, password, role, telephone) VALUES (?, ?, ?, ?, ?)'
         );
         $insert->execute([$name, $email, password_hash($password, PASSWORD_DEFAULT), $role, $telephone]);
+        record_system_activity(
+            $pdo,
+            'user.created',
+            'Created ' . $role . ' account "' . $email . '".',
+            'User account created',
+            'A new ' . $role . ' account was created for ' . $name . '.'
+        );
         set_flash('success', ucfirst($role) . ' user created successfully.');
         header('Location: admin.php?view=users');
         exit;
@@ -258,6 +360,13 @@ try {
 
         $update = $pdo->prepare('UPDATE users SET password = ? WHERE id = ?');
         $update->execute([password_hash($newPassword, PASSWORD_DEFAULT), $userId]);
+        record_system_activity(
+            $pdo,
+            'user.password_reset',
+            'Reset password for user #' . $userId . '.',
+            'User password reset',
+            'An administrator reset a user account password.'
+        );
         set_flash('success', 'Password reset completed.');
         header('Location: admin.php?view=users');
         exit;
@@ -291,6 +400,13 @@ try {
 
         $update = $pdo->prepare('UPDATE users SET name = ?, email = ?, telephone = ?, role = ? WHERE id = ?');
         $update->execute([$name, $email, $telephone, $role, $userId]);
+        record_system_activity(
+            $pdo,
+            'user.updated',
+            'Updated account #' . $userId . ' (' . $email . ').',
+            'User account updated',
+            'The account for ' . $name . ' was updated.'
+        );
         set_flash('success', 'User updated successfully.');
         header('Location: admin.php?view=users');
         exit;
@@ -308,8 +424,21 @@ try {
             throw new RuntimeException('You cannot remove your own logged-in account.');
         }
 
+        $userStmt = $pdo->prepare('SELECT name, email FROM users WHERE id = ?');
+        $userStmt->execute([$userId]);
+        $user = $userStmt->fetch();
+        if (!$user) {
+            throw new RuntimeException('User not found.');
+        }
         $delete = $pdo->prepare('DELETE FROM users WHERE id = ?');
         $delete->execute([$userId]);
+        record_system_activity(
+            $pdo,
+            'user.deleted',
+            'Removed account #' . $userId . ' (' . (string) $user['email'] . ').',
+            'User account removed',
+            'The account for ' . (string) $user['name'] . ' was removed.'
+        );
         set_flash('success', 'User removed successfully.');
         header('Location: admin.php?view=users');
         exit;

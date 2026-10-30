@@ -73,6 +73,16 @@ try {
 }
 
 clear_cart();
+record_system_activity(
+    $pdo,
+    'order.created',
+    'Customer placed order #' . $orderId . ' for ' . count($cartLines) . ' product line(s), total FRW ' . number_format(cart_grand_total($cartLines), 2) . '.',
+    'New customer order',
+    'Order #' . $orderId . ' was placed with ' . count($cartLines) . ' product line(s).',
+    true,
+    'admin.php?view=orders',
+    'Customer'
+);
 
 $sellerStmt = $pdo->prepare("SELECT telephone FROM users WHERE role = 'seller' ORDER BY id ASC LIMIT 1");
 $sellerStmt->execute();

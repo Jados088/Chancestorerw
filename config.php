@@ -2,13 +2,22 @@
 declare(strict_types=1);
 
 if (session_status() === PHP_SESSION_NONE) {
+    ini_set('session.use_strict_mode', '1');
+    ini_set('session.use_only_cookies', '1');
+    session_set_cookie_params([
+        'lifetime' => 0,
+        'path' => '/',
+        'secure' => !empty($_SERVER['HTTPS']) && strtolower((string) $_SERVER['HTTPS']) !== 'off',
+        'httponly' => true,
+        'samesite' => 'Lax',
+    ]);
     session_start();
 }
 
-const DB_HOST = 'localhost';
-const DB_NAME = 'if0_41788004_chance_store';
-const DB_USER = 'if0_41788004';
-const DB_PASS = 'Jados2026';
+define('DB_HOST', getenv('DB_HOST') ?: 'localhost');
+define('DB_NAME', getenv('DB_NAME') ?: 'if0_41788004_chance_store');
+define('DB_USER', getenv('DB_USER') ?: 'root');
+define('DB_PASS', getenv('DB_PASS') ?: '');
 const LEGACY_BAD_ADMIN_HASH = '$2y$10$tbJx8EnBa5jS4PPfQ0s4Iudph7YqqA9anQavPNo3x6xZC0x15jN7W';
 
 function db(): PDO
@@ -57,8 +66,170 @@ function db(): PDO
     $pdo->exec("UPDATE users SET role = 'admin' WHERE email = 'admin@chancestore.com'");
 
     ensure_multi_order_schema($pdo);
+    ensure_system_notification_schema($pdo);
 
     return $pdo;
+}
+
+function ensure_system_notification_schema(PDO $pdo): void
+{
+    $pdo->exec(
+        'CREATE TABLE IF NOT EXISTS notifications (
+            id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+            recipient_user_id INT NOT NULL,
+            category VARCHAR(40) NOT NULL,
+            title VARCHAR(180) NOT NULL,
+            message TEXT NOT NULL,
+            link VARCHAR(255) NOT NULL DEFAULT \'admin.php?view=notifications\',
+            is_read TINYINT(1) NOT NULL DEFAULT 0,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            INDEX idx_notifications_recipient_read_created (recipient_user_id, is_read, created_at),
+            CONSTRAINT fk_notifications_recipient FOREIGN KEY (recipient_user_id) REFERENCES users(id) ON DELETE CASCADE
+        )'
+    );
+
+    $pdo->exec(
+        'CREATE TABLE IF NOT EXISTS audit_logs (
+            id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+            actor_user_id INT NULL,
+            actor_name VARCHAR(120) NOT NULL,
+            action VARCHAR(80) NOT NULL,
+            details TEXT NOT NULL,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            INDEX idx_audit_logs_created (created_at),
+            INDEX idx_audit_logs_actor (actor_user_id)
+        )'
+    );
+}
+
+function send_system_notification_email(string $recipientEmail, string $title, string $message): void
+{
+    $host = trim((string) (getenv('SMTP_HOST') ?: ''));
+    if ($host === '') {
+        return;
+    }
+
+    $autoload = __DIR__ . '/vendor/autoload.php';
+    if (!is_file($autoload)) {
+        error_log('Notification email is enabled, but PHPMailer is not installed.');
+        return;
+    }
+    require_once $autoload;
+
+    $mailClass = \PHPMailer\PHPMailer\PHPMailer::class;
+    if (!class_exists($mailClass)) {
+        error_log('Notification email is enabled, but PHPMailer could not be loaded.');
+        return;
+    }
+
+    $fromEmail = trim((string) (getenv('SMTP_FROM_EMAIL') ?: ''));
+    $fromName = trim((string) (getenv('SMTP_FROM_NAME') ?: 'Chance Store'));
+    $username = (string) (getenv('SMTP_USERNAME') ?: '');
+    $password = (string) (getenv('SMTP_PASSWORD') ?: '');
+    $encryption = strtolower(trim((string) (getenv('SMTP_ENCRYPTION') ?: 'tls')));
+    $port = filter_var(
+        getenv('SMTP_PORT') ?: ($encryption === 'ssl' ? '465' : '587'),
+        FILTER_VALIDATE_INT,
+        ['options' => ['min_range' => 1, 'max_range' => 65535]]
+    );
+
+    if (
+        !filter_var($fromEmail, FILTER_VALIDATE_EMAIL)
+        || !filter_var($recipientEmail, FILTER_VALIDATE_EMAIL)
+        || !in_array($encryption, ['tls', 'ssl'], true)
+        || (($username === '') !== ($password === ''))
+        || $port === false
+    ) {
+        error_log('Notification email configuration or recipient is invalid.');
+        return;
+    }
+
+    try {
+        $mail = new $mailClass(true);
+        $mail->isSMTP();
+        $mail->Host = $host;
+        $mail->SMTPAuth = $username !== '';
+        if ($mail->SMTPAuth) {
+            $mail->Username = $username;
+            $mail->Password = $password;
+        }
+        $mail->SMTPSecure = $encryption === 'ssl'
+            ? \PHPMailer\PHPMailer\PHPMailer::ENCRYPTION_SMTPS
+            : \PHPMailer\PHPMailer\PHPMailer::ENCRYPTION_STARTTLS;
+        $mail->Port = $port;
+        $mail->Timeout = 5;
+        $mail->CharSet = 'UTF-8';
+        $mail->setFrom($fromEmail, $fromName);
+        $mail->addAddress($recipientEmail);
+        $mail->isHTML(false);
+        $mail->Subject = $title;
+        $mail->Body = $message;
+        $mail->send();
+    } catch (Throwable $e) {
+        error_log('Notification email delivery failed: ' . $e->getMessage());
+    }
+}
+
+function record_system_activity(
+    PDO $pdo,
+    string $action,
+    string $details,
+    string $title,
+    string $message,
+    bool $notifySellers = false,
+    string $link = 'admin.php?view=notifications',
+    ?string $actorNameOverride = null
+): void {
+    $ownsTransaction = !$pdo->inTransaction();
+    try {
+        if ($ownsTransaction) {
+            $pdo->beginTransaction();
+        }
+
+        $actorId = $actorNameOverride === null ? (int) ($_SESSION['admin_id'] ?? 0) : 0;
+        $actorName = trim($actorNameOverride ?? (string) ($_SESSION['admin_name'] ?? 'Customer'));
+        if ($actorName === '') {
+            $actorName = 'Customer';
+        }
+
+        $log = $pdo->prepare(
+            'INSERT INTO audit_logs (actor_user_id, actor_name, action, details) VALUES (?, ?, ?, ?)'
+        );
+        $log->execute([$actorId > 0 ? $actorId : null, $actorName, $action, $details]);
+
+        $roleCondition = $notifySellers ? "role IN ('admin', 'seller')" : "role = 'admin'";
+        $recipients = $pdo->query(
+            "SELECT id, email FROM users WHERE $roleCondition ORDER BY id ASC"
+        )->fetchAll();
+        $notification = $pdo->prepare(
+            'INSERT INTO notifications (recipient_user_id, category, title, message, link)
+             VALUES (?, ?, ?, ?, ?)'
+        );
+
+        foreach ($recipients as $recipient) {
+            $notification->execute([
+                (int) $recipient['id'],
+                $notifySellers ? 'orders' : 'system',
+                $title,
+                $message,
+                $link,
+            ]);
+        }
+
+        if ($ownsTransaction) {
+            $pdo->commit();
+        }
+    } catch (Throwable $e) {
+        if ($ownsTransaction && $pdo->inTransaction()) {
+            $pdo->rollBack();
+        }
+        error_log('Could not record system activity "' . $action . '": ' . $e->getMessage());
+        return;
+    }
+
+    foreach ($recipients as $recipient) {
+        send_system_notification_email((string) $recipient['email'], $title, $message);
+    }
 }
 
 function ensure_multi_order_schema(PDO $pdo): void
@@ -294,6 +465,21 @@ function require_login(): void
         header('Location: login.php');
         exit;
     }
+
+    $userId = (int) $_SESSION['admin_id'];
+    $stmt = db()->prepare('SELECT name, role FROM users WHERE id = ? LIMIT 1');
+    $stmt->execute([$userId]);
+    $user = $stmt->fetch();
+    if (!$user || !in_array((string) $user['role'], ['admin', 'seller'], true)) {
+        $_SESSION = [];
+        session_regenerate_id(true);
+        set_flash('error', 'Your account is no longer available. Please sign in again.');
+        header('Location: login.php');
+        exit;
+    }
+
+    $_SESSION['admin_name'] = (string) $user['name'];
+    $_SESSION['admin_role'] = (string) $user['role'];
 }
 
 function require_admin(): void
@@ -317,7 +503,8 @@ function csrf_token(): string
 function verify_csrf(): bool
 {
     $token = $_POST['csrf_token'] ?? '';
-    return hash_equals($_SESSION['csrf_token'] ?? '', $token);
+    $sessionToken = $_SESSION['csrf_token'] ?? '';
+    return is_string($token) && is_string($sessionToken) && hash_equals($sessionToken, $token);
 }
 
 function get_site_contact(): array

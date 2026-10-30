@@ -9,9 +9,9 @@ $flash = get_flash();
 $pdo = db();
 
 $view = (string) ($_GET['view'] ?? 'orders');
-$allowedViews = ['orders', 'products', 'contacts', 'reports', 'profile'];
+$allowedViews = ['orders', 'notifications', 'profile'];
 if ($isAdmin) {
-    $allowedViews[] = 'users';
+    $allowedViews = ['orders', 'notifications', 'products', 'contacts', 'reports', 'profile', 'users'];
 }
 if (!in_array($view, $allowedViews, true)) {
     $view = 'orders';
@@ -29,7 +29,66 @@ $orders = [];
 $ordersTotal = 0;
 $users = [];
 $usersTotal = 0;
+$notifications = [];
+$auditLogs = [];
+$systemUsage = [];
+$unreadNotifications = 0;
+$notificationsTotal = 0;
+$auditLogsTotal = 0;
+$notificationPage = max(1, (int) ($_GET['notification_page'] ?? 1));
+$auditPage = max(1, (int) ($_GET['audit_page'] ?? 1));
+$notificationPages = 1;
+$auditPages = 1;
 $totalPages = 1;
+
+$unreadStmt = $pdo->prepare('SELECT COUNT(*) FROM notifications WHERE recipient_user_id = ? AND is_read = 0');
+$unreadStmt->execute([(int) $_SESSION['admin_id']]);
+$unreadNotifications = (int) $unreadStmt->fetchColumn();
+
+if ($view === 'notifications') {
+    $notificationCount = $pdo->prepare('SELECT COUNT(*) FROM notifications WHERE recipient_user_id = ?');
+    $notificationCount->execute([(int) $_SESSION['admin_id']]);
+    $notificationsTotal = (int) $notificationCount->fetchColumn();
+    $notificationPages = max(1, (int) ceil($notificationsTotal / $perPage));
+    $notificationPage = min($notificationPage, $notificationPages);
+
+    if ($isAdmin) {
+        $auditLogsTotal = (int) $pdo->query('SELECT COUNT(*) FROM audit_logs')->fetchColumn();
+        $auditPages = max(1, (int) ceil($auditLogsTotal / $perPage));
+        $auditPage = min($auditPage, $auditPages);
+    }
+    $notificationOffset = ($notificationPage - 1) * $perPage;
+
+    $notificationStmt = $pdo->prepare(
+        'SELECT id, category, title, message, is_read, created_at
+         FROM notifications WHERE recipient_user_id = ?
+         ORDER BY created_at DESC, id DESC LIMIT ? OFFSET ?'
+    );
+    $notificationStmt->bindValue(1, (int) $_SESSION['admin_id'], PDO::PARAM_INT);
+    $notificationStmt->bindValue(2, $perPage, PDO::PARAM_INT);
+    $notificationStmt->bindValue(3, $notificationOffset, PDO::PARAM_INT);
+    $notificationStmt->execute();
+    $notifications = $notificationStmt->fetchAll();
+
+    if ($isAdmin) {
+        $auditStmt = $pdo->prepare(
+            'SELECT actor_name, action, details, created_at
+             FROM audit_logs ORDER BY created_at DESC, id DESC LIMIT ? OFFSET ?'
+        );
+        $auditStmt->bindValue(1, $perPage, PDO::PARAM_INT);
+        $auditStmt->bindValue(2, ($auditPage - 1) * $perPage, PDO::PARAM_INT);
+        $auditStmt->execute();
+        $auditLogs = $auditStmt->fetchAll();
+        $systemUsage = $pdo->query(
+            "SELECT
+                (SELECT COUNT(*) FROM users) AS total_users,
+                (SELECT COUNT(*) FROM products) AS total_products,
+                (SELECT COUNT(*) FROM customer_orders) AS total_orders,
+                (SELECT COUNT(*) FROM customer_orders WHERE created_at >= DATE_SUB(NOW(), INTERVAL 7 DAY)) AS orders_last_7_days,
+                (SELECT COUNT(*) FROM audit_logs WHERE created_at >= DATE_SUB(NOW(), INTERVAL 7 DAY)) AS actions_last_7_days"
+        )->fetch() ?: [];
+    }
+}
 
 if ($view === 'products') {
     $productsTotal = (int) ($pdo->query('SELECT COUNT(*) AS c FROM products')->fetch()['c'] ?? 0);
@@ -63,9 +122,9 @@ if ($isAdmin && $view === 'users') {
     $users = $stmt->fetchAll();
 }
 
-function pagination_href(string $view, int $page): string
+function pagination_href(string $view, int $page, string $pageParam = 'page'): string
 {
-    return 'admin.php?view=' . urlencode($view) . '&page=' . $page;
+    return 'admin.php?' . http_build_query(['view' => $view, $pageParam => $page]);
 }
 
 function report_pdf_href(string $startDate, string $endDate): string
@@ -95,7 +154,7 @@ function order_status_badge_class(string $status): string
     return 'status-badge';
 }
 
-function render_pagination(string $view, int $page, int $totalPages): void
+function render_pagination(string $view, int $page, int $totalPages, string $pageParam = 'page'): void
 {
     if ($totalPages <= 1) {
         return;
@@ -104,9 +163,9 @@ function render_pagination(string $view, int $page, int $totalPages): void
     $next = min($totalPages, $page + 1);
     ?>
     <div class="pagination">
-        <a class="btn secondary <?= $page <= 1 ? 'disabled' : '' ?>" href="<?= e(pagination_href($view, $prev)) ?>">Prev</a>
+        <a class="btn secondary <?= $page <= 1 ? 'disabled' : '' ?>" href="<?= e(pagination_href($view, $prev, $pageParam)) ?>">Prev</a>
         <div class="pagination-meta">Page <strong><?= (int) $page ?></strong> of <strong><?= (int) $totalPages ?></strong></div>
-        <a class="btn secondary <?= $page >= $totalPages ? 'disabled' : '' ?>" href="<?= e(pagination_href($view, $next)) ?>">Next</a>
+        <a class="btn secondary <?= $page >= $totalPages ? 'disabled' : '' ?>" href="<?= e(pagination_href($view, $next, $pageParam)) ?>">Next</a>
     </div>
     <?php
 }
@@ -228,18 +287,24 @@ if ($currentUserId > 0) {
                             <span class="task-link-icon" aria-hidden="true">&#128203;</span>
                             <span class="task-link-text">Orders</span>
                         </a>
-                        <a class="task-link <?= $view === 'products' ? 'active' : '' ?>" href="admin.php?view=products" title="Products">
-                            <span class="task-link-icon" aria-hidden="true">&#128230;</span>
-                            <span class="task-link-text">Products</span>
-                        </a>
-                        <a class="task-link <?= $view === 'contacts' ? 'active' : '' ?>" href="admin.php?view=contacts" title="Contacts">
-                            <span class="task-link-icon" aria-hidden="true">&#128222;</span>
-                            <span class="task-link-text">Contacts</span>
+                        <a class="task-link <?= $view === 'notifications' ? 'active' : '' ?>" href="admin.php?view=notifications" title="Notifications">
+                            <span class="task-link-icon" aria-hidden="true">&#128276;</span>
+                            <span class="task-link-text">Notifications<?= $unreadNotifications > 0 ? ' (' . $unreadNotifications . ')' : '' ?></span>
                         </a>
                         <a class="task-link <?= $view === 'profile' ? 'active' : '' ?>" href="admin.php?view=profile" title="Profile">
                             <span class="task-link-icon" aria-hidden="true">&#128100;</span>
                             <span class="task-link-text">Profile</span>
                         </a>
+                        <?php if ($isAdmin): ?>
+                            <a class="task-link <?= $view === 'products' ? 'active' : '' ?>" href="admin.php?view=products" title="Products">
+                                <span class="task-link-icon" aria-hidden="true">&#128230;</span>
+                                <span class="task-link-text">Products</span>
+                            </a>
+                            <a class="task-link <?= $view === 'contacts' ? 'active' : '' ?>" href="admin.php?view=contacts" title="Contacts">
+                                <span class="task-link-icon" aria-hidden="true">&#128222;</span>
+                                <span class="task-link-text">Contacts</span>
+                            </a>
+                        <?php endif; ?>
                     </div>
                 </div>
 
@@ -262,6 +327,87 @@ if ($currentUserId > 0) {
         </aside>
 
         <div class="dashboard-content">
+
+    <?php if ($view === 'notifications'): ?>
+        <section class="panel">
+            <div class="notification-heading">
+                <div>
+                    <h2>Notifications</h2>
+                    <p>Your latest order and system updates.</p>
+                </div>
+                <?php if ($unreadNotifications > 0): ?>
+                    <form action="admin_actions.php" method="post">
+                        <input type="hidden" name="csrf_token" value="<?= e(csrf_token()) ?>">
+                        <input type="hidden" name="action" value="mark_all_notifications_read">
+                        <button class="btn secondary" type="submit">Mark all as read</button>
+                    </form>
+                <?php endif; ?>
+            </div>
+            <?php if ($notifications === []): ?>
+                <p>No notifications yet.</p>
+            <?php else: ?>
+                <div class="notification-list">
+                    <?php foreach ($notifications as $notification): ?>
+                        <article class="notification-item <?= (int) $notification['is_read'] === 0 ? 'unread' : '' ?>">
+                            <div>
+                                <h3><?= e((string) $notification['title']) ?></h3>
+                                <p><?= e((string) $notification['message']) ?></p>
+                                <time datetime="<?= e(date('c', strtotime((string) $notification['created_at']))) ?>"><?= e((string) $notification['created_at']) ?></time>
+                            </div>
+                            <div class="notification-actions">
+                                <a class="btn secondary" href="<?= $notification['category'] === 'orders' ? 'admin.php?view=orders' : 'admin.php?view=notifications' ?>">Open</a>
+                                <?php if ((int) $notification['is_read'] === 0): ?>
+                                    <form action="admin_actions.php" method="post">
+                                        <input type="hidden" name="csrf_token" value="<?= e(csrf_token()) ?>">
+                                        <input type="hidden" name="action" value="mark_notification_read">
+                                        <input type="hidden" name="notification_id" value="<?= (int) $notification['id'] ?>">
+                                        <button class="btn" type="submit">Mark read</button>
+                                    </form>
+                                <?php endif; ?>
+                            </div>
+                        </article>
+                    <?php endforeach; ?>
+                </div>
+            <?php endif; ?>
+            <?php render_pagination('notifications', $notificationPage, $notificationPages, 'notification_page'); ?>
+        </section>
+
+        <?php if ($isAdmin): ?>
+            <section class="panel">
+                <h2>System Usage (last 7 days where noted)</h2>
+                <div class="admin-stat-grid">
+                    <div class="admin-stat-card"><strong><?= (int) ($systemUsage['total_users'] ?? 0) ?></strong><span>Accounts</span></div>
+                    <div class="admin-stat-card"><strong><?= (int) ($systemUsage['total_products'] ?? 0) ?></strong><span>Products</span></div>
+                    <div class="admin-stat-card"><strong><?= (int) ($systemUsage['total_orders'] ?? 0) ?></strong><span>All Orders</span></div>
+                    <div class="admin-stat-card"><strong><?= (int) ($systemUsage['orders_last_7_days'] ?? 0) ?></strong><span>Orders in 7 Days</span></div>
+                    <div class="admin-stat-card"><strong><?= (int) ($systemUsage['actions_last_7_days'] ?? 0) ?></strong><span>Recorded Actions in 7 Days</span></div>
+                </div>
+            </section>
+            <section class="panel">
+                <h2>Audit Log</h2>
+                <?php if ($auditLogs === []): ?>
+                    <p>No recorded activity yet.</p>
+                <?php else: ?>
+                    <div class="table-wrap">
+                        <table>
+                            <thead><tr><th>Time</th><th>Actor</th><th>Action</th><th>Details</th></tr></thead>
+                            <tbody>
+                            <?php foreach ($auditLogs as $log): ?>
+                                <tr>
+                                    <td><?= e((string) $log['created_at']) ?></td>
+                                    <td><?= e((string) $log['actor_name']) ?></td>
+                                    <td><?= e((string) $log['action']) ?></td>
+                                    <td><?= e((string) $log['details']) ?></td>
+                                </tr>
+                            <?php endforeach; ?>
+                            </tbody>
+                        </table>
+                    </div>
+                <?php endif; ?>
+                <?php render_pagination('notifications', $auditPage, $auditPages, 'audit_page'); ?>
+            </section>
+        <?php endif; ?>
+    <?php endif; ?>
 
     <?php if ($view === 'products'): ?>
         <section class="panel">

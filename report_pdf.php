@@ -1,7 +1,14 @@
 <?php
 declare(strict_types=1);
 require_once __DIR__ . '/config.php';
-require_login();
+require_admin();
+record_system_activity(
+    db(),
+    'report.pdf_downloaded',
+    'Generated the orders PDF report.',
+    'Orders PDF generated',
+    'An administrator generated the orders PDF report.'
+);
 
 function pdf_escape(string $text): string
 {

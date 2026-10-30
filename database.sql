@@ -60,6 +60,30 @@ CREATE TABLE IF NOT EXISTS contacts (
     address VARCHAR(255) NOT NULL
 );
 
+CREATE TABLE IF NOT EXISTS notifications (
+    id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    recipient_user_id INT NOT NULL,
+    category VARCHAR(40) NOT NULL,
+    title VARCHAR(180) NOT NULL,
+    message TEXT NOT NULL,
+    link VARCHAR(255) NOT NULL DEFAULT 'admin.php?view=notifications',
+    is_read TINYINT(1) NOT NULL DEFAULT 0,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    INDEX idx_notifications_recipient_read_created (recipient_user_id, is_read, created_at),
+    CONSTRAINT fk_notifications_recipient FOREIGN KEY (recipient_user_id) REFERENCES users(id) ON DELETE CASCADE
+);
+
+CREATE TABLE IF NOT EXISTS audit_logs (
+    id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    actor_user_id INT NULL,
+    actor_name VARCHAR(120) NOT NULL,
+    action VARCHAR(80) NOT NULL,
+    details TEXT NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    INDEX idx_audit_logs_created (created_at),
+    INDEX idx_audit_logs_actor (actor_user_id)
+);
+
 INSERT INTO contacts (id, phone, email, address)
 VALUES (1, '+0000000000', 'info@chancestore.com', 'Chance Store Ltd Address')
 ON DUPLICATE KEY UPDATE id = id;

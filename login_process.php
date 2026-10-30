@@ -36,6 +36,14 @@ $_SESSION['admin_name'] = $user['name'];
 $_SESSION['admin_role'] = $user['role'];
 session_regenerate_id(true);
 
+record_system_activity(
+    db(),
+    'user.login',
+    ucfirst((string) $user['role']) . ' account signed in.',
+    'Dashboard sign-in',
+    ucfirst((string) $user['role']) . ' account "' . (string) $user['name'] . '" signed in.'
+);
+
 set_flash('success', 'Welcome back, ' . $user['name'] . '.');
 header('Location: admin.php');
 exit;

@@ -2,7 +2,14 @@
 declare(strict_types=1);
 
 require_once __DIR__ . '/config.php';
-require_login();
+require_admin();
+record_system_activity(
+    db(),
+    'report.csv_downloaded',
+    'Downloaded the orders CSV report.',
+    'Orders report downloaded',
+    'An administrator downloaded the orders CSV report.'
+);
 
 try {
     $pdo = db();

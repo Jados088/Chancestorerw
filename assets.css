@@ -1444,6 +1444,66 @@ textarea:focus {
     font-weight: 700;
 }
 
+.notification-heading {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 14px;
+}
+
+.notification-heading h2 {
+    margin: 0;
+}
+
+.notification-heading p {
+    margin: 5px 0 0;
+    color: var(--muted);
+}
+
+.notification-list {
+    display: grid;
+    gap: 10px;
+    margin-top: 16px;
+}
+
+.notification-item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    padding: 14px;
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    background: var(--surface);
+}
+
+.notification-item.unread {
+    border-left: 4px solid var(--brand);
+    background: #f0f5ed;
+}
+
+.notification-item h3 {
+    margin: 0;
+    color: var(--ink);
+    font-size: 14px;
+}
+
+.notification-item p {
+    margin: 5px 0;
+    overflow-wrap: anywhere;
+}
+
+.notification-item time {
+    color: var(--muted);
+    font-size: 11px;
+}
+
+.notification-actions {
+    display: flex;
+    flex: 0 0 auto;
+    gap: 7px;
+}
+
 .dashboard-content code {
     overflow-wrap: anywhere;
     color: var(--ink-soft);
@@ -1933,6 +1993,15 @@ textarea:focus {
 
     .nav-actions {
         gap: 6px;
+    }
+
+    .notification-item {
+        align-items: flex-start;
+        flex-direction: column;
+    }
+
+    .notification-actions {
+        flex-wrap: wrap;
     }
 
     .admin-greeting {
